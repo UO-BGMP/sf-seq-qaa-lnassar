@@ -1,0 +1,235 @@
+---
+title: "Bi_624_PS1"
+author: "LNass"
+date: "September 27, 2017"
+output: html_document
+---
+
+SF-Seq Quality Assessment Assignment
+===================================================
+
+Part 1 - SF-Seq read quality score distributions
+------------------------------------------------
+
+Needed files were located on talapas in the following directory: ```/projects/bgmp/2017_sequencing/demultiplexed/```
+
+My assigned sequence files were: ```11_2H_both and 4_2C_mbnl```
+
+In order to run Fastqc on talapas we ran the following commands
+
+```
+xrun
+ml easybuild intel/2017a FastQC
+fastqc
+```
+
+In order to run fastqc I ran the following commands
+
+```
+time fastqc -o /home/lnassar/Bi624 --noextract -f fastq 11_2H_both_S9_L008_R1_001.fastq 11_2H_both_S9_L008_R2_001.fastq 4_2C_mbnl_S4_L008_R1_001.fastq 4_2C_mbnl_S4_L008_R2_001.fastq
+```
+
+In order to run python I loaded the following modules on talapas: ```ml prl python/3.6.0```
+The slurm script submitted to talapas was the following, excluding the header:
+
+```
+ml prl python/3.6.0
+time python3.6 Part1Py1.py
+time python3.6 Part1Py2.py
+```
+Here we upload our FastQC plots for all 4 reads depicting both quality score distribution and per-base N content. The identifier is in the caption below the image.
+
+![11_2H R1 Per Base Quality](11_2H_R1_per_base_quality.png)
+
+![11_2H R1 Per Base N Content](11_2H_R1_per_base_n_content.png)
+
+![11_2H R2 Per Base Quality](11_2H_R2_per_base_quality.png)
+
+![11_2H R2 Per Base N Content](11_2H_R2_per_base_n_content.png)
+
+![4_2C R1 Per Base Quality](4_2C_R1_per_base_quality.png)
+
+![4_2C R1 Per Base N Content](4_2C_R1_per_base_n_content.png)
+
+![4_2C R2 Per Base Quality](4_2C_R2_per_base_quality.png)
+
+![4_2C R2 Per Base N Content](4_2C_R2_per_base_n_content.png)
+
+
+**RUNTIME**
+
+My own script took 71 minutes and 23.542 seconds to run.
+FastQC took 4 minutes and 50.692 seconds to run.
+
+Clearly FastQC is a much more efficient way to run through the data. This is likely due to 1. Simply a more efficient way of writing code, with an emphasis on efficiency as opposed to simply creating an output. and 2. It was written in Java as opposed to Python.
+
+**PLOTS DIFFERENCE**
+
+For all the plots, as expected from sequencing data the first ~6 bases have a lower quality score which matches with the per base N content which has a bit of an increase in the very beginning.
+
+Likewise the quality score per bp location matched pretty closely between my generated plots and fastQC. They both followed a standard pattern of a dip in the beginning followed by a very slow decline until the end of the read. None of the sequences showed any sort of anomaly. The only real difference between my own script and the fastQC was the time, my own script took about 14 times longer to run than FastQC.
+
+Part 2 - Adapter trimming comparison
+-------------------------------------------
+
+**Trimmomatic**: A fast multithreaded command line tool for trimming and cropping many sequence platform outputs including illumina. Among its features it prunes adapter sequences. The main difference with trimmomatic from the others is that it's applicable to different platforms, performs many different functions, and is written in java.
+
+**CutAdapt**: Cut adapt also is a command line tool however it is specifically designed to just do adapter trimming. It has many different which allow to run as simply as 2 arguments or much more complex. Seems like a good option if you're just looking to trim adapters and not do any further processing. Fairly simple to understand.
+
+**process_shortreads**: A stacks tool used for reads processing that performs a few key functions including adapter trimming. Fairly simple to run, can be given a large amount of conditional arguments to tailor exact function and output.
+
+I chose to use Trimmomatic as it was the most different from anything I'd experienced before. The Talapas script used (minus the header) was as follows:
+
+```
+ml easybuild Trimmomatic
+java -jar $EBROOTTRIMMOMATIC/trimmomatic-0.36.jar PE 11_2H_both_S9_L008_R1_001.fastq 11_2H_both_S9_L008_R2_001.fastq 11_2H_bothPF 11_2H_bothUP 11_2H_bothPR 11_2H_bothUR ILLUMINACLIP:adapters.txt:2:30:10
+```
+
+The same script was done with the other file, with only the names changing. The arguments being specified are: PE for Paired End, then the Forward and Reverse files, then 4 file names, PF, UP, PR, and UR, which stand for Paired Forward, Unpaired Forward, Paired Reverse, and Unpaired Reverse. ILLUMINACLIP is the function used for illumina sequence data, as it supports others and that's followed by the file with the adapters, the number of allowed mismatches (2), the palindrome clip threshold, and finally the simple clip threshold. I used the default values are those are related to their trimming strategy.
+
+In order to compare what proportion of reads were trimmed as well as plot the read length distribution, the following UNIX command was used to parse the file and find the sequence read lengths after processing:
+
+```
+cat MyFasta.fq | awk 'NR%4==2' | awk '{print length}' | sort | uniq -c > R1_trimmed_read_count.txt
+```
+
+Now we read in our files with the length distributions and find the proportions trimmed:
+
+```{r}
+R1_11_2H_both <- read.table('11_2H_bothPF_Read_Count.txt')
+R2_11_2H_both <- read.table('11_2H_bothPR_Read_Count.txt')
+R1_4_2Cmbnl <- read.table('4_2C_mbnl_PF_Read_Count.txt')
+R2_4_2Cmbnl <- read.table('4_2C_mbnl_PR_Read_Count.txt')
+
+#Find the proportion of trimmed reads, this is done by adding all values, subrtracting reads at 101 length, and dividing by sum
+#First for R1_11_2H_both = .75%
+(sum(R1_11_2H_both$V1)-max(R1_11_2H_both$V1))/sum(R1_11_2H_both$V1)
+
+#Now R2_11_2H_both = .77%
+(sum(R2_11_2H_both$V1)-max(R2_11_2H_both$V1))/sum(R2_11_2H_both$V1)
+
+#Now R1_4_2Cmbnl = 1.8%
+(sum(R1_4_2Cmbnl$V1)-max(R1_4_2Cmbnl$V1))/sum(R1_4_2Cmbnl$V1)
+
+#Now R2_4_2Cmbnl = 1.9%
+(sum(R2_4_2Cmbnl$V1)-max(R2_4_2Cmbnl$V1))/sum(R2_4_2Cmbnl$V1)
+
+```
+
+Now we plot our trimmed reads so that they overlay on the same graphs.
+
+```{r}
+plot(R1_11_2H_both$V2,log10(R1_11_2H_both$V1), col="blue", pch=0, xlab = "Length of Read", ylab = "Frequency of Read (log10)", main = "Trimmed Read Length vs. Frequency for 11_2H_both")
+points(R2_11_2H_both$V2,log10(R2_11_2H_both$V1),col="green", pch=2)
+legend(30, 7, legend = c("R1 Trimmed Reads","R2 Trimmed Reads"), col=c("blue","green"), pch = c(0,2))
+```
+
+The size distribution for sample #11 according to the fragment analyzer was an average bp size of 385 between 164 and 872 bp. Which constituted the vast majority of the sample. Sample 11_2H had an average amount adapter trimmed reads of .76% between R1 and R2. This is consistent with the Very small peak seen in the fragment analyzer, because beyond that a very small amount of the sample is represented below 250 bp size, so you would not expect the adapters to be sequenced very much.
+
+```{r}
+plot(R1_4_2Cmbnl$V2,log10(R1_4_2Cmbnl$V1), col="blue", pch=0, xlab = "Length of Read", ylab = "Frequency of Read (log10)", main = "Trimmed Read Length vs. Frequency for 4_2C_mbnl")
+points(R2_4_2Cmbnl$V2,log10(R2_4_2Cmbnl$V1),col="green", pch=2)
+legend(30, 7, legend = c("R1 Trimmed Reads","R2 Trimmed Reads"), col=c("blue","green"), pch = c(0,2))
+```
+
+The size distribution for sample #4 according to the fragment analyzer was an average bp size of 417 between 179 and 1110 bp. Which constituted the vast majority of the sample. Sample 4_2C had about ~1.7% average adapter trimming in its reads. This makes sense as well when compared to 11_2H because 4_2C had a larger amount of reads present <250 bp (though still a small amount). It is interesting to note though that 4_2C did not have an adapter dimer peak at 150. All the adapter contamination likely came from that 200-250 bp range.
+
+Part 3 - rRNA reads and strand-specificity
+-------------------------------------------------
+
+First the ensembl database for non coding RNA was downloaded and formatted properly. In order to remove the newline characters between sequence lines the following UNIX command was used:
+
+```
+cat Mus_musculus.GRCm38.ncrna.fa | awk '/^>/{print s? s"\n"$0:$0;s="";next}{s=s sprintf("%s",$0)}END{if(s)print s}' > mouse_noncoding.fa
+```
+
+The following bash code was then applied to the resulting file in order to pull out the header + sequence of any line which matched rRNA:
+
+```
+cat mouse_noncoding.fa | awk '/rRNA/{nr[NR]; nr[NR+1]}; NR in nr' > mouse_rRNA.fa
+```
+
+The breakdown of the resulting sequences were:
+```
+      354 transcript_biotype:rRNA
+      1 transcript_biotype:pseudogene
+      1 transcript_biotype:rRNA
+      2 transcript_biotype:Mt_rRNA
+```
+
+I chose to leave them in as it seems all of them are different labels for rRNA, the pseudogene is listed as gene biotype: rRNA as well.
+
+Next we need to generate a GMAP database from our mouse rRNA file:
+
+```
+gmap_build -d Mouse_rRNA -D /home/lnassar/Bi624/Part3/GMAP_BUILD mouse_rRNA.fa
+```
+
+Next we ran gsnap using each of our forward reads against our rRNA database.
+```
+gsnap -D /home/lnassar/Bi624/Part3/GMAP_BUILD -d Mouse_rRNA -B 4 -m 20 -t 28 -O --split-output gsnap_out -A sam /home/lnassar/Bi624/Part3/11_2H_both_S9_L008_R1_001.fastq
+```
+
+From those results we simply find the number of unpaired uniq reads which were reads mapped to rRNA and divide that by out starting read count in order to find what proportion of our starting reads contained rRNA. This was done with simple grep (using -v "^@" to avoid the gsnap header) and modulo awk in order to count the lines.
+
+```
+cat gsnap_out.unpaired_uniq | grep -v "^@" | wc -l
+cat 4_2C_mbnl_S4_L008_R1_001.fastq | awk '{if(NR%2==0) print $0}' | wc -l
+```
+Results were:
+**11_2H rRNA**: 628501
+**11_2H total**: 17919193
+
+**4_2C rRNA**: 347639
+**4_2C total**: 9265284
+
+```{r}
+628501/17919193 #11_2H Proportion
+347639/9265284 #4_2C Proportion
+```
+
+In total we saw that the 11_2H R1 sequences were composed of 3.5% rRNA contamination sequences. Our 4_2C R1 was composed of 3.8% rRNA contamination sequences. All in all not an entirely large amount but certainly worth accounting and correcting for.
+
+For the final part we are exploring that the data are from strand specific libraries. In order to do this we downloaded the cDNA mouse library from ensembl, created a database out of it, then used gmap on a subset of our R1/R2 sequences for both datasets to find the respective strand orientations.
+
+The subset used was 300,000 sequences, done by:
+
+```
+cat 11_2H_both_S9_L008_R1_001.fastq | head -n 300000 > 11_2H_R1.fastq
+```
+
+First we created our gmap database
+
+```
+gmap_build -d Mouse_cDNA -D /home/lnassar/Bi624/Part4/gmap_build Mus_musculus.GRCm38.cdna.all.fa
+```
+
+Then we ran gmap four times, one for each of our orientations and datasets. Here is an example of one of those runs:
+
+```
+gmap -D /home/lnassar/Bi624/Part4/gmap_build -d Mouse_cDNA -B 4 -t 14 -O -f 3 /home/lnassar/Bi624/Part4/11_2H_R1.fastq > 11_2H_R1_gmap
+```
+
+Finally we parsed the output file, looked at the matching sequences, cut the 7th field which represents strand orientation, and finally sorted and uniq'd in order to see what proportion of the strands were + and -.
+
+```
+cat 11_2H_R1_gmap | grep -v "^No" | grep -v "^#" | grep -v "Removed" | cut -f 7 | sort | uniq -c
+```
+Once we had the the results from all matches we imported them to R as tables. They are sorted by whether the sequences matched to the reverse or forward strand.
+
+```{r}
+s11_2H = read.table('11_2H.txt',header = TRUE, row.names = 1)
+s4_2C = read.table('4_2C.txt',header = TRUE, row.names = 1)
+par(mfrow = c(1, 2))
+
+barplot(s11_2H$R1, xlab = c('Reverse Strand (-)      Forward Strand (+)'), main = "11_2H R1 Strand Direction Hits", col = c("blue","red"))
+barplot(s11_2H$R2, xlab = c('Reverse Strand (-)      Forward Strand (+)'), main = "11_2H R2 Strand Direction Hits", col = c("blue","red"))
+
+barplot(s4_2C$R1, xlab = c('Reverse Strand (-)     Forward Strand (+)'), main = "4_2C R1 Strand Direction Hits", col = c("blue","red"))
+barplot(s4_2C$R2, xlab = c('Reverse Strand (-)     Forward Strand (+)'), main = "4_2C R2 Strand Direction Hits", col = c("blue","red"))
+library(pander)
+pander(s11_2H)
+pander(s4_2C)
+```
+
+Clearly our R1 represents our reverse strand and R2 represents the forward strand. 
